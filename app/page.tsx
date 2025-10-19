@@ -236,7 +236,10 @@ export default function Home() {
                         className="w-24 h-24 object-cover rounded-lg shadow-sm"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
-                          e.currentTarget.nextElementSibling.style.display = 'block';
+                          const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
+                          if (nextElement) {
+                            nextElement.style.display = 'block';
+                          }
                         }}
                       />
                       <div className="w-24 h-24 bg-slate-200 dark:bg-slate-600 rounded-lg flex items-center justify-center text-xs text-slate-500 dark:text-slate-400" style={{display: 'none'}}>
