@@ -8,6 +8,9 @@ export default function RemoveBgPage() {
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [originalDimensions, setOriginalDimensions] = useState<{width: number, height: number} | null>(null);
+  const [processedDimensions, setProcessedDimensions] = useState<{width: number, height: number} | null>(null);
+  const [processedSize, setProcessedSize] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -16,6 +19,15 @@ export default function RemoveBgPage() {
       setSelectedFile(file);
       setProcessedImage(null);
       setError(null);
+      setProcessedDimensions(null);
+      setProcessedSize(0);
+
+      // 获取原图尺寸
+      const img = new Image();
+      img.onload = () => {
+        setOriginalDimensions({ width: img.width, height: img.height });
+      };
+      img.src = URL.createObjectURL(file);
     }
   };
 
@@ -30,6 +42,15 @@ export default function RemoveBgPage() {
       setSelectedFile(file);
       setProcessedImage(null);
       setError(null);
+      setProcessedDimensions(null);
+      setProcessedSize(0);
+
+      // 获取原图尺寸
+      const img = new Image();
+      img.onload = () => {
+        setOriginalDimensions({ width: img.width, height: img.height });
+      };
+      img.src = URL.createObjectURL(file);
     }
   };
 
@@ -57,6 +78,14 @@ export default function RemoveBgPage() {
       const imageBlob = await response.blob();
       const imageUrl = URL.createObjectURL(imageBlob);
       setProcessedImage(imageUrl);
+      setProcessedSize(imageBlob.size);
+
+      // 获取处理后图片的尺寸
+      const processedImg = new Image();
+      processedImg.onload = () => {
+        setProcessedDimensions({ width: processedImg.width, height: processedImg.height });
+      };
+      processedImg.src = imageUrl;
 
     } catch (error) {
       console.error('背景移除失败:', error);
@@ -206,22 +235,58 @@ export default function RemoveBgPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Original Image */}
                 <div>
-                  <p className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                    原始图片
-                  </p>
-                  <img
-                    src={URL.createObjectURL(selectedFile)}
-                    alt="原始图片"
-                    className="w-full h-64 object-cover rounded-lg border"
-                  />
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      原始图片
+                    </p>
+                    <span className="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 px-2 py-1 rounded text-xs">
+                      原图
+                    </span>
+                  </div>
+                  <div className="relative bg-gray-50 dark:bg-gray-700 rounded-lg border h-64 flex items-center justify-center overflow-hidden">
+                    <img
+                      src={URL.createObjectURL(selectedFile)}
+                      alt="原始图片"
+                      className="max-w-full max-h-full object-contain rounded-lg"
+                    />
+                  </div>
+                  <div className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                    <div className="flex justify-between">
+                      <span>文件大小:</span>
+                      <span className="font-medium">{formatFileSize(selectedFile.size)}</span>
+                    </div>
+                    {originalDimensions && (
+                      <div className="flex justify-between">
+                        <span>图片尺寸:</span>
+                        <span className="font-medium">{originalDimensions.width} × {originalDimensions.height}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>文件格式:</span>
+                      <span className="font-medium">{selectedFile.type.split('/')[1].toUpperCase()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>背景状态:</span>
+                      <span className="font-medium">含背景</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Processed Image */}
                 <div>
-                  <p className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                    去背景后
-                  </p>
-                  <div className="relative bg-checkered rounded-lg border h-64 flex items-center justify-center">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      去背景后
+                    </p>
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      processedImage
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                        : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                    }`}>
+                      {processedImage ? '已完成' : '等待处理'}
+                    </span>
+                  </div>
+                  <div className="relative bg-checkered rounded-lg border h-64 flex items-center justify-center overflow-hidden">
                     {processedImage ? (
                       <img
                         src={processedImage}
@@ -232,6 +297,51 @@ export default function RemoveBgPage() {
                       <div className="text-gray-400 text-center">
                         <div className="text-4xl mb-2">🖼️</div>
                         <p className="text-sm">处理后的图片将显示在这里</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                    <div className="flex justify-between">
+                      <span>文件大小:</span>
+                      <span className={`font-medium ${processedSize > 0 ? 'text-green-600' : ''}`}>
+                        {processedSize > 0 ? formatFileSize(processedSize) : '-'}
+                      </span>
+                    </div>
+                    {processedDimensions ? (
+                      <div className="flex justify-between">
+                        <span>图片尺寸:</span>
+                        <span className="font-medium">{processedDimensions.width} × {processedDimensions.height}</span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between">
+                        <span>图片尺寸:</span>
+                        <span>-</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>文件格式:</span>
+                      <span className="font-medium">{processedImage ? 'PNG' : '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>背景状态:</span>
+                      <span className={`font-medium ${processedImage ? 'text-green-600' : ''}`}>
+                        {processedImage ? '透明背景' : '-'}
+                      </span>
+                    </div>
+                    {processedSize > 0 && selectedFile.size > 0 && (
+                      <div className="flex justify-between">
+                        <span>大小变化:</span>
+                        <span className={`font-medium ${
+                          processedSize < selectedFile.size ? 'text-green-600' :
+                          processedSize > selectedFile.size ? 'text-red-600' : 'text-gray-600'
+                        }`}>
+                          {processedSize < selectedFile.size
+                            ? `减少 ${((selectedFile.size - processedSize) / selectedFile.size * 100).toFixed(1)}%`
+                            : processedSize > selectedFile.size
+                            ? `增加 ${((processedSize - selectedFile.size) / selectedFile.size * 100).toFixed(1)}%`
+                            : '无变化'
+                          }
+                        </span>
                       </div>
                     )}
                   </div>
