@@ -9,62 +9,190 @@ interface GeneratedImage {
   prompt: string;
   style: string;
   timestamp: number;
+  size: string;
+  revisedPrompt?: string;
+}
+
+interface ImageGenerationRequest {
+  prompt: string;
+  size?: string; // 改为支持自定义尺寸格式，如 "1024x768"
+  sequential_image_generation?: 'enabled' | 'disabled';
+  response_format?: 'url' | 'b64_json';
+  stream?: boolean;
+  watermark?: boolean;
 }
 
 export default function GeneratePage() {
   const [prompt, setPrompt] = useState<string>("");
-  const [selectedStyle, setSelectedStyle] = useState<string>("realistic");
+  const [selectedStyle, setSelectedStyle] = useState<string>("");
+  const [selectedResolution, setSelectedResolution] = useState<'1K' | '2K' | '4K'>('2K');
+  const [selectedRatio, setSelectedRatio] = useState<string>('1:1');
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
 
-  const styles = [
-    { id: "realistic", name: "真实风格", description: "逼真的照片效果" },
-    { id: "artistic", name: "艺术风格", description: "绘画艺术效果" },
-    { id: "anime", name: "动漫风格", description: "日式动漫风格" },
-    { id: "cartoon", name: "卡通风格", description: "可爱卡通效果" },
-    { id: "sketch", name: "素描风格", description: "铅笔素描效果" },
-    { id: "oil", name: "油画风格", description: "经典油画效果" }
+  const styleTemplates = [
+    { id: "realistic", name: "真实风格", modifier: ", photorealistic, high quality, detailed", description: "逼真的照片效果" },
+    { id: "artistic", name: "艺术风格", modifier: ", artistic painting, masterpiece, fine art", description: "绘画艺术效果" },
+    { id: "anime", name: "动漫风格", modifier: ", anime style, manga art, japanese animation", description: "日式动漫风格" },
+    { id: "cartoon", name: "卡通风格", modifier: ", cartoon style, cute, colorful", description: "可爱卡通效果" },
+    { id: "sketch", name: "素描风格", modifier: ", pencil sketch, black and white, artistic drawing", description: "铅笔素描效果" },
+    { id: "oil", name: "油画风格", modifier: ", oil painting, classical art, brush strokes", description: "经典油画效果" }
+  ];
+
+  const resolutions = [
+    { id: '1K' as const, name: '1K', description: '1024像素', detail: '标准质量' },
+    { id: '2K' as const, name: '2K', description: '2048像素', detail: '高清质量' },
+    { id: '4K' as const, name: '4K', description: '4096像素', detail: '超高清' }
+  ];
+
+  const aspectRatios = [
+    { id: '21:9', name: '21:9', description: '超宽屏', detail: '电影比例' },
+    { id: '16:9', name: '16:9', description: '宽屏', detail: '视频标准' },
+    { id: '3:2', name: '3:2', description: '相机比例', detail: '经典摄影' },
+    { id: '4:3', name: '4:3', description: '传统比例', detail: '标准画面' },
+    { id: '1:1', name: '1:1', description: '正方形', detail: '社交媒体' },
+    { id: '3:4', name: '3:4', description: '竖版相机', detail: '人像摄影' },
+    { id: '2:3', name: '2:3', description: '竖版标准', detail: '海报比例' },
+    { id: '9:16', name: '9:16', description: '竖屏视频', detail: '短视频' }
   ];
 
   const promptTemplates = [
-    "一只可爱的小猫在花园里玩耍",
-    "未来科技城市的夜景",
-    "美丽的山水风景画",
-    "宇宙中的神秘星球",
-    "古典欧式建筑",
-    "梦幻森林中的小屋"
+    "星际穿越，黑洞，黑洞里冲出一辆复古列车，抢视觉冲击力，电影大片",
+    "未来科技城市的夜景，霓虹灯，赛博朋克风格，高分辨率",
+    "美丽的山水风景画，中国水墨画风格，意境深远",
+    "宇宙中的神秘星球，梦幻色彩，星云背景",
+    "古典欧式建筑，巴洛克风格，金色装饰，华丽庄严",
+    "梦幻森林中的小屋，魔法光芒，童话风格，温馨"
   ];
 
   const generateImage = async () => {
     if (!prompt.trim()) return;
 
     setIsGenerating(true);
+    setError("");
 
     try {
-      // 模拟API调用延迟
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // 构建样式化的提示词
+      const stylePrompt = getStyledPrompt(prompt, selectedStyle);
 
-      // 这里是模拟的生成结果
-      // 在实际应用中，你需要集成真正的AI生图API，比如：
-      // - OpenAI DALL-E API
-      // - Stability AI
-      // - Midjourney API
-      // - 本地Stable Diffusion模型
+      // 计算实际图片尺寸
+      const actualSize = calculateImageSize(selectedResolution, selectedRatio);
 
-      // 生成一个模拟的图片URL（这里使用placeholder图片）
-      const newImage: GeneratedImage = {
-        id: Date.now().toString(),
-        url: `https://picsum.photos/512/512?random=${Date.now()}`,
-        prompt: prompt,
-        style: selectedStyle,
-        timestamp: Date.now()
+      // 准备请求参数
+      const request: ImageGenerationRequest = {
+        prompt: stylePrompt,
+        size: actualSize, // 使用计算出的实际尺寸
+        sequential_image_generation: "disabled",
+        response_format: "url",
+        stream: false,
+        watermark: true
       };
 
-      setGeneratedImages(prev => [newImage, ...prev]);
+      // 调用本地API路由
+      const response = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        let errorMessage = '生成失败';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        throw new Error('API响应格式错误');
+      }
+
+      if (data.data && data.data.length > 0) {
+        const imageData = data.data[0];
+        if (imageData.url) {
+          const newImage: GeneratedImage = {
+            id: Date.now().toString(),
+            url: imageData.url,
+            prompt: prompt,
+            style: selectedStyle,
+            size: `${selectedResolution} (${selectedRatio}) - ${actualSize}`,
+            timestamp: Date.now(),
+            revisedPrompt: imageData.revised_prompt
+          };
+
+          setGeneratedImages(prev => [newImage, ...prev]);
+        } else {
+          throw new Error('API未返回图片URL');
+        }
+      } else {
+        throw new Error('API未返回图片数据');
+      }
+
       setIsGenerating(false);
     } catch (error) {
       console.error('生成失败:', error);
+      setError(error instanceof Error ? error.message : '生成失败，请重试');
       setIsGenerating(false);
+    }
+  };
+
+  const calculateImageSize = (resolution: '1K' | '2K' | '4K', ratio: string): string => {
+    // 基础尺寸定义
+    const baseSizes = {
+      '1K': 1024,
+      '2K': 2048,
+      '4K': 4096
+    };
+
+    const baseSize = baseSizes[resolution];
+
+    // 解析比例
+    const [widthRatio, heightRatio] = ratio.split(':').map(Number);
+
+    // 根据比例计算宽高
+    let width: number, height: number;
+
+    if (widthRatio >= heightRatio) {
+      // 横向或正方形
+      width = baseSize;
+      height = Math.round(baseSize * (heightRatio / widthRatio));
+    } else {
+      // 纵向
+      height = baseSize;
+      width = Math.round(baseSize * (widthRatio / heightRatio));
+    }
+
+    // 确保尺寸是8的倍数（常见的图像生成要求）
+    width = Math.round(width / 8) * 8;
+    height = Math.round(height / 8) * 8;
+
+    return `${width}x${height}`;
+  };
+
+  const getStyledPrompt = (basePrompt: string, styleId: string): string => {
+    if (!styleId) return basePrompt;
+
+    const selectedTemplate = styleTemplates.find(template => template.id === styleId);
+    if (selectedTemplate) {
+      return basePrompt + selectedTemplate.modifier;
+    }
+
+    return basePrompt;
+  };
+
+  const applyStyleTemplate = (templateId: string) => {
+    const template = styleTemplates.find(t => t.id === templateId);
+    if (template) {
+      setSelectedStyle(templateId);
     }
   };
 
@@ -78,7 +206,7 @@ export default function GeneratePage() {
   };
 
   const getStyleName = (styleId: string) => {
-    return styles.find(s => s.id === styleId)?.name || styleId;
+    return styleTemplates.find(s => s.id === styleId)?.name || styleId;
   };
 
   return (
@@ -141,32 +269,151 @@ export default function GeneratePage() {
               </div>
             </div>
 
-            {/* Style Selection */}
+            {/* Style Templates */}
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                艺术风格
+                风格模板建议 <span className="text-gray-500 text-xs">(可选)</span>
               </label>
+              <p className="text-xs text-gray-500 mb-3">
+                点击下方模板快速应用风格，或自由创作不受限制
+              </p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {styles.map((style) => (
+                {styleTemplates.map((template) => (
                   <button
-                    key={style.id}
-                    onClick={() => setSelectedStyle(style.id)}
+                    key={template.id}
+                    onClick={() => applyStyleTemplate(template.id)}
+                    className={`p-3 rounded-lg border transition-all text-left ${
+                      selectedStyle === template.id
+                        ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-pink-300'
+                    }`}
+                  >
+                    <div className="font-medium text-gray-900 dark:text-white text-sm">
+                      {template.name}
+                    </div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      {template.description}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              {selectedStyle && (
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="text-sm text-green-600 dark:text-green-400">
+                    ✓ 已应用{styleTemplates.find(t => t.id === selectedStyle)?.name}风格
+                  </span>
+                  <button
+                    onClick={() => setSelectedStyle("")}
+                    className="text-xs text-gray-500 hover:text-gray-700 underline"
+                  >
+                    清除风格
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Resolution Selection */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                图片分辨率
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                {resolutions.map((resolution) => (
+                  <button
+                    key={resolution.id}
+                    onClick={() => setSelectedResolution(resolution.id)}
                     className={`p-4 rounded-lg border-2 transition-all ${
-                      selectedStyle === style.id
+                      selectedResolution === resolution.id
                         ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20'
                         : 'border-gray-200 dark:border-gray-600 hover:border-pink-300'
                     }`}
                   >
                     <div className="font-medium text-gray-900 dark:text-white">
-                      {style.name}
+                      {resolution.name}
                     </div>
                     <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                      {style.description}
+                      {resolution.description}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {resolution.detail}
                     </div>
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* Aspect Ratio Selection */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                图片比例
+              </label>
+              <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+                {aspectRatios.map((ratio) => (
+                  <button
+                    key={ratio.id}
+                    onClick={() => setSelectedRatio(ratio.id)}
+                    className={`p-3 rounded-lg border-2 transition-all text-center ${
+                      selectedRatio === ratio.id
+                        ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-pink-300'
+                    }`}
+                  >
+                    <div className="font-medium text-gray-900 dark:text-white text-sm">
+                      {ratio.name}
+                    </div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      {ratio.description}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {ratio.detail}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Size Preview */}
+            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-blue-600 dark:text-blue-400">📐</span>
+                <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  生成预览
+                </h4>
+              </div>
+              <div className="text-sm text-blue-800 dark:text-blue-200">
+                <p>
+                  <span className="font-medium">分辨率:</span> {selectedResolution} ({
+                    selectedResolution === '1K' ? '1024像素' :
+                    selectedResolution === '2K' ? '2048像素' : '4096像素'
+                  })
+                </p>
+                <p>
+                  <span className="font-medium">比例:</span> {selectedRatio} ({
+                    aspectRatios.find(r => r.id === selectedRatio)?.description
+                  })
+                </p>
+                <p>
+                  <span className="font-medium">实际尺寸:</span> {calculateImageSize(selectedResolution, selectedRatio)}
+                </p>
+              </div>
+            </div>
+
+            {/* Error Display */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="text-red-500 mt-0.5">⚠️</div>
+                  <div>
+                    <h4 className="font-semibold text-red-900 dark:text-red-100 mb-1">
+                      生成失败
+                    </h4>
+                    <p className="text-red-800 dark:text-red-200 text-sm">
+                      {error}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Generate Button */}
             <button
@@ -190,15 +437,15 @@ export default function GeneratePage() {
           </div>
 
           {/* API Notice */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-8">
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-8">
             <div className="flex items-start gap-3">
-              <div className="text-blue-500 mt-0.5">ℹ️</div>
+              <div className="text-green-500 mt-0.5">🚀</div>
               <div>
-                <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                  功能说明
+                <h4 className="font-semibold text-green-900 dark:text-green-100 mb-1">
+                  API集成完成
                 </h4>
-                <p className="text-blue-800 dark:text-blue-200 text-sm">
-                  这是一个演示版本，显示的是随机图片。在实际应用中，需要集成专业的AI生图API（如OpenAI DALL-E、Stability AI等）来实现真正的AI图片生成功能。
+                <p className="text-green-800 dark:text-green-200 text-sm">
+                  已集成火山引擎AI生图API，提供真实的AI图片生成功能。支持多种尺寸、风格和高质量图片生成。
                 </p>
               </div>
             </div>
@@ -217,18 +464,28 @@ export default function GeneratePage() {
                     key={image.id}
                     className="bg-gray-50 dark:bg-gray-700 rounded-lg overflow-hidden"
                   >
-                    <img
-                      src={image.url}
-                      alt={image.prompt}
-                      className="w-full h-48 object-cover"
-                    />
+                    <div className="w-full h-48 bg-gray-100 dark:bg-gray-600 flex items-center justify-center">
+                      <img
+                        src={image.url}
+                        alt={image.prompt}
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
                     <div className="p-4">
                       <p className="text-sm text-gray-700 dark:text-gray-300 mb-2 line-clamp-2">
-                        {image.prompt}
+                        <strong>原始提示词：</strong>{image.prompt}
                       </p>
-                      <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+                      {image.revisedPrompt && (
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
+                          <strong>AI优化提示词：</strong>{image.revisedPrompt}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
                         <span>{getStyleName(image.style)}</span>
-                        <span>{new Date(image.timestamp).toLocaleTimeString()}</span>
+                        <span>{image.size}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 mb-3 text-center">
+                        {new Date(image.timestamp).toLocaleString()}
                       </div>
                       <button
                         onClick={() => downloadImage(image.url, image.prompt)}

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState, useRef } from "react";
-import { recognizeImageWithVolcano } from "../lib/volcanoApi";
 
 interface RecognitionResult {
   category: string;
@@ -36,8 +35,23 @@ export default function RecognizePage() {
     setActiveTab(type);
 
     try {
-      // Call Volcano Engine API for image recognition
-      const apiResponse = await recognizeImageWithVolcano(selectedFile);
+      // 准备FormData
+      const formData = new FormData();
+      formData.append('image', selectedFile);
+
+      // 调用本地API路由
+      const response = await fetch('/api/recognize-image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '识别失败');
+      }
+
+      const data = await response.json();
+      const apiResponse = data.content;
 
       // Parse the response and create a structured result
       const result: RecognitionResult = {
