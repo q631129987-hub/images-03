@@ -8,21 +8,10 @@ interface VolcanoApiResponse {
   }>;
 }
 
-const convertImageToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        // Remove the data URL prefix (data:image/jpeg;base64,)
-        const base64 = reader.result.split(',')[1];
-        resolve(base64);
-      } else {
-        reject(new Error('Failed to convert image to base64'));
-      }
-    };
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
+const convertImageToBase64 = async (file: File): Promise<string> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return buffer.toString('base64');
 };
 
 const getImageFormat = (file: File): string => {
