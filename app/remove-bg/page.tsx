@@ -7,6 +7,7 @@ export default function RemoveBgPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -14,6 +15,21 @@ export default function RemoveBgPage() {
     if (file && file.type.startsWith('image/')) {
       setSelectedFile(file);
       setProcessedImage(null);
+      setError(null);
+    }
+  };
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+  };
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      setSelectedFile(file);
+      setProcessedImage(null);
+      setError(null);
     }
   };
 
@@ -21,76 +37,52 @@ export default function RemoveBgPage() {
     if (!selectedFile) return;
 
     setIsProcessing(true);
+    setError(null);
 
     try {
-      // 这里是一个简化的背景移除示例
-      // 在实际应用中，你需要集成真正的背景移除API，比如：
-      // - Remove.bg API
-      // - 本地AI模型
-      // - 其他背景移除服务
+      const formData = new FormData();
+      formData.append('image', selectedFile);
 
-      // 模拟处理过程
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      // 这里只是示例，实际应该调用真正的背景移除API
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
-
-      await new Promise((resolve) => {
-        img.onload = resolve;
-        img.src = URL.createObjectURL(selectedFile);
+      const response = await fetch('/api/remove-bg', {
+        method: 'POST',
+        body: formData,
       });
 
-      canvas.width = img.width;
-      canvas.height = img.height;
-
-      // 创建渐变遮罩效果作为示例
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-
-        // 创建一个简单的遮罩效果（这不是真正的背景移除）
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-
-          // 简单的边缘检测和透明度调整
-          const brightness = (r + g + b) / 3;
-          if (brightness > 200) {
-            data[i + 3] = 100; // 降低亮色区域透明度
-          }
-        }
-
-        ctx.putImageData(imageData, 0, 0);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '背景移除失败');
       }
 
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const processedUrl = URL.createObjectURL(blob);
-          setProcessedImage(processedUrl);
-        }
-        setIsProcessing(false);
-      }, 'image/png');
+      // 获取处理后的图片
+      const imageBlob = await response.blob();
+      const imageUrl = URL.createObjectURL(imageBlob);
+      setProcessedImage(imageUrl);
 
     } catch (error) {
-      console.error('处理失败:', error);
+      console.error('背景移除失败:', error);
+      setError(error instanceof Error ? error.message : '背景移除失败，请稍后再试');
+    } finally {
       setIsProcessing(false);
     }
   };
 
-  const downloadProcessed = () => {
+  const downloadImage = () => {
     if (!processedImage) return;
 
     const link = document.createElement('a');
     link.href = processedImage;
-    link.download = `removed_bg_${selectedFile?.name || 'image.png'}`;
+    link.download = `no-bg-${selectedFile?.name || 'image.png'}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
@@ -108,7 +100,7 @@ export default function RemoveBgPage() {
             抠图去背景
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            AI智能识别主体，一键去除图片背景，支持人像、物品等各种场景
+            AI智能识别主体，一键去除图片背景，支持人像、物品、动物等各种场景
           </p>
         </div>
 
@@ -118,6 +110,8 @@ export default function RemoveBgPage() {
             <div
               className="border-2 border-dashed border-green-300 dark:border-green-600 rounded-xl p-12 text-center cursor-pointer hover:border-green-500 transition-colors"
               onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
             >
               <div className="text-6xl mb-4">✂️</div>
               <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">
@@ -139,21 +133,7 @@ export default function RemoveBgPage() {
             />
           </div>
 
-          {/* Processing Notice */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-8">
-            <div className="flex items-start gap-3">
-              <div className="text-blue-500 mt-0.5">ℹ️</div>
-              <div>
-                <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                  功能说明
-                </h4>
-                <p className="text-blue-800 dark:text-blue-200 text-sm">
-                  这是一个演示版本。在实际应用中，需要集成专业的背景移除API（如Remove.bg）或部署本地AI模型来实现高质量的背景移除效果。
-                </p>
-              </div>
-            </div>
-          </div>
-
+          {/* Processing Area */}
           {selectedFile && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 mb-8">
               <div className="flex justify-between items-center mb-6">
@@ -162,7 +142,7 @@ export default function RemoveBgPage() {
                     {selectedFile.name}
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    准备进行背景移除
+                    文件大小: {formatFileSize(selectedFile.size)}
                   </p>
                 </div>
 
@@ -177,7 +157,7 @@ export default function RemoveBgPage() {
 
                   {processedImage && (
                     <button
-                      onClick={downloadProcessed}
+                      onClick={downloadImage}
                       className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
                     >
                       下载结果
@@ -186,6 +166,24 @@ export default function RemoveBgPage() {
                 </div>
               </div>
 
+              {/* Error Display */}
+              {error && (
+                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <div className="text-red-500 mt-0.5">❌</div>
+                    <div>
+                      <h4 className="font-semibold text-red-900 dark:text-red-100 mb-1">
+                        处理失败
+                      </h4>
+                      <p className="text-red-800 dark:text-red-200 text-sm">
+                        {error}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Processing Indicator */}
               {isProcessing && (
                 <div className="mb-6">
                   <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
@@ -203,27 +201,27 @@ export default function RemoveBgPage() {
           {selectedFile && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8">
               <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-                处理结果
+                预览对比
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Original Image */}
                 <div>
                   <p className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                     原始图片
                   </p>
-                  <div className="relative">
-                    <img
-                      src={URL.createObjectURL(selectedFile)}
-                      alt="原始图片"
-                      className="w-full h-64 object-cover rounded-lg border"
-                    />
-                  </div>
+                  <img
+                    src={URL.createObjectURL(selectedFile)}
+                    alt="原始图片"
+                    className="w-full h-64 object-cover rounded-lg border"
+                  />
                 </div>
 
+                {/* Processed Image */}
                 <div>
                   <p className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                     去背景后
                   </p>
-                  <div className="relative bg-checkered bg-white rounded-lg border h-64 flex items-center justify-center">
+                  <div className="relative bg-checkered rounded-lg border h-64 flex items-center justify-center">
                     {processedImage ? (
                       <img
                         src={processedImage}
